@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: engine
+  datasource:
+    url: jdbc:postgresql://pg-2983eb51-ykgaming0908-c95d.i.aivencloud.com:19508/defaultdb?ssl=require&sslmode=require
+    username: username
+    password: password
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+groq:
+  api-key: apikey
+  base-url: https://api.groq.com/openai/v1
+  model: llama-3.1-8b-instant
+  temperature: 0.0
+  whisper-model: whisper-large-v3
+
+app:
+  token:
+    min-reduction-pct: 30
+    confidence-threshold: 0.65
+  memory:
+    merge-threshold: 0.85
+    related-threshold: 0.50
+
+server:
+  port: 8080

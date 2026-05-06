@@ -1,11 +1,15 @@
 package com.razer.engine.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.razer.engine.exception.LowConfidenceException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.Duration;
@@ -14,115 +18,143 @@ import java.time.Duration;
 public class SpeechToTextService {
 
     private final WebClient webClient;
+    private final ObjectMapper objectMapper;
     private final String apiKey;
-    private final String baseUrl;
+    private final String whisperModel;
     private final double confidenceThreshold;
 
     public SpeechToTextService(WebClient webClient,
-                               @Value("${app.assemblyai.api-key:}") String apiKey,
-                               @Value("${app.assemblyai.base-url:https://api.assemblyai.com/v2}") String baseUrl,
-                               @Value("${app.validation.confidence-threshold:0.65}") double confidenceThreshold) {
+                               ObjectMapper objectMapper,
+                               @Value("${groq.api-key}") String apiKey,
+                               @Value("${groq.whisper-model:whisper-large-v3}") String whisperModel,
+                               @Value("${app.token.confidence-threshold:0.65}") double confidenceThreshold) {
+
         this.webClient = webClient;
+        this.objectMapper = objectMapper;
         this.apiKey = apiKey;
-        this.baseUrl = baseUrl;
+        this.whisperModel = whisperModel;
         this.confidenceThreshold = confidenceThreshold;
     }
 
     public TranscriptionResult transcribe(MultipartFile audioFile) {
+
         if (apiKey == null || apiKey.isBlank()) {
-            throw new IllegalStateException("ASSEMBLYAI_API_KEY is required");
+            throw new IllegalStateException("GROQ_API_KEY is required");
         }
+
         try {
+
             byte[] audioBytes = audioFile.getBytes();
-            String uploadUrl = upload(audioBytes);
-            JsonNode transcript = createTranscript(uploadUrl);
-            String status = transcript.path("status").asText();
-            while (!"completed".equalsIgnoreCase(status)) {
-                if ("error".equalsIgnoreCase(status)) {
-                    throw new IllegalStateException(transcript.path("error").asText("AssemblyAI transcription failed"));
+
+            String originalFilename = audioFile.getOriginalFilename() != null
+                    ? audioFile.getOriginalFilename()
+                    : "audio.webm";
+
+            MultipartBodyBuilder builder = new MultipartBodyBuilder();
+
+            builder.part("file", new ByteArrayResource(audioBytes) {
+                @Override
+                public String getFilename() {
+                    return originalFilename;
                 }
-                if ("failed".equalsIgnoreCase(status)) {
-                    throw new IllegalStateException("AssemblyAI transcription failed");
-                }
-                sleep(1200);
-                transcript = fetchTranscript(transcript.path("id").asText());
-                status = transcript.path("status").asText();
+            });
+
+            builder.part("model", whisperModel);
+            builder.part("response_format", "verbose_json");
+
+            String responseBody = webClient.post()
+                    .uri("https://api.groq.com/openai/v1/audio/transcriptions")
+                    .header("Authorization", "Bearer " + apiKey)
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(BodyInserters.fromMultipartData(builder.build()))
+                    .retrieve()
+                    .onStatus(
+                            status -> status.isError(),
+                            clientResponse -> clientResponse.bodyToMono(String.class)
+                                    .map(body -> new RuntimeException("Groq Whisper Error: " + body))
+                    )
+                    .bodyToMono(String.class)
+                    .block(Duration.ofSeconds(60));
+
+            JsonNode response;
+
+            try {
+                response = objectMapper.readTree(responseBody);
+            } catch (Exception exception) {
+                throw new IllegalStateException(
+                        "Unable to parse Groq Whisper response",
+                        exception
+                );
             }
 
-            String text = transcript.path("text").asText("");
-            double confidence = transcript.path("confidence").asDouble(0.0);
-            String language = transcript.path("language_code").asText("en");
+            if (response == null || response.path("text").isMissingNode()) {
+                throw new IllegalStateException("Groq Whisper returned no transcription");
+            }
+
+            String text = response.path("text").asText("").trim();
+
+            String language = response.path("language").asText("en");
+
+            double confidence = extractConfidence(response);
 
             if (confidence < confidenceThreshold) {
-                throw new LowConfidenceException(confidence, "Speech confidence is below the required threshold");
+                throw new LowConfidenceException(
+                        confidence,
+                        "Speech confidence is below threshold"
+                );
             }
 
-            return new TranscriptionResult(text, confidence, language);
+            return new TranscriptionResult(
+                    text,
+                    confidence,
+                    language
+            );
+
         } catch (LowConfidenceException exception) {
             throw exception;
+
         } catch (Exception exception) {
-            throw new IllegalStateException("Unable to transcribe audio: " + exception.getMessage(), exception);
+
+            throw new IllegalStateException(
+                    "Unable to transcribe audio: " + exception.getMessage(),
+                    exception
+            );
         }
     }
 
-    private String upload(byte[] audioBytes) {
-        JsonNode response = webClient.post()
-                .uri(baseUrl + "/upload")
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .header("authorization", apiKey)
-                .bodyValue(audioBytes)
-                .retrieve()
-                .bodyToMono(JsonNode.class)
-                .block(Duration.ofSeconds(60));
+    private double extractConfidence(JsonNode response) {
 
-        if (response == null || response.path("upload_url").isMissingNode()) {
-            throw new IllegalStateException("AssemblyAI upload did not return an upload_url");
+        JsonNode segments = response.path("segments");
+
+        if (segments.isArray() && segments.size() > 0) {
+
+            double totalLogProb = 0.0;
+            int count = 0;
+
+            for (JsonNode segment : segments) {
+
+                if (!segment.path("avg_logprob").isMissingNode()) {
+
+                    totalLogProb += segment.path("avg_logprob").asDouble();
+
+                    count++;
+                }
+            }
+
+            if (count > 0) {
+
+                double avgLogProb = totalLogProb / count;
+
+                return Math.min(1.0, Math.exp(avgLogProb));
+            }
         }
-        return response.path("upload_url").asText();
+
+        return 0.85;
     }
 
-    private JsonNode createTranscript(String uploadUrl) {
-        JsonNode response = webClient.post()
-                .uri(baseUrl + "/transcript")
-                .contentType(MediaType.APPLICATION_JSON)
-                .header("authorization", apiKey)
-                .bodyValue(new TranscriptRequest(uploadUrl, true))
-                .retrieve()
-                .bodyToMono(JsonNode.class)
-                .block(Duration.ofSeconds(60));
-
-        if (response == null || response.path("id").isMissingNode()) {
-            throw new IllegalStateException("AssemblyAI transcript creation failed");
-        }
-        return response;
-    }
-
-    private JsonNode fetchTranscript(String transcriptId) {
-        JsonNode response = webClient.get()
-                .uri(baseUrl + "/transcript/" + transcriptId)
-                .header("authorization", apiKey)
-                .retrieve()
-                .bodyToMono(JsonNode.class)
-                .block(Duration.ofSeconds(60));
-
-        if (response == null) {
-            throw new IllegalStateException("AssemblyAI transcript polling returned no payload");
-        }
-        return response;
-    }
-
-    private void sleep(long milliseconds) {
-        try {
-            Thread.sleep(milliseconds);
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Transcription polling interrupted", exception);
-        }
-    }
-
-    public record TranscriptionResult(String text, double confidence, String language) {
-    }
-
-    public record TranscriptRequest(String audio_url, boolean language_detection) {
-    }
+    public record TranscriptionResult(
+            String text,
+            double confidence,
+            String language
+    ) {}
 }

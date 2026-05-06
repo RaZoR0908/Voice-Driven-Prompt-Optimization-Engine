@@ -9,13 +9,11 @@ import org.springframework.web.reactive.function.client.WebClient;
 public class AppConfig {
 
     @Bean
-    public WebClient.Builder webClientBuilder() {
-        return WebClient.builder();
-    }
-
-    @Bean
     public WebClient webClient() {
-        return WebClient.builder().build();
+        return WebClient.builder()
+                .codecs(config -> config.defaultCodecs()
+                        .maxInMemorySize(10 * 1024 * 1024)) // 10MB for audio
+                .build();
     }
 
     @Bean
