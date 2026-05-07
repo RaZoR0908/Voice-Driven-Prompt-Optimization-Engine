@@ -59,12 +59,71 @@ public class LanguageNormalizer {
             return hasEnglish ? "mr-mix" : "hi";
         }
 
-        String lower = input.toLowerCase(Locale.ROOT);
-        if (lower.matches(".*\\b(yaar|bhai|arrey|kya|kaise|kar do|bana do|thoda|plz|ek|do|teen|hai|hain|nahi|aur|ke liye)\\b.*")) {
-            return "hinglish";
+        // Use Groq for language detection
+        try {
+            return detectLanguageViaGroq(input);
+        } catch (Exception e) {
+            return "en"; // fallback to English if Groq fails
+        }
+    }
+
+    private String detectLanguageViaGroq(String text) {
+        Map<String, Object> request = Map.of(
+                "model", model,
+                "messages", List.of(
+                        Map.of("role", "system", "content", """
+                                Detect the language of the following text.
+                                Output ONLY one of these labels: en, hi, hinglish, mr, mr-mix
+                                Do not output anything else, no explanation, no notes.
+                                
+                                Examples:
+                                - "Help me write a blog post about AI" → en
+                                - "Ek marketing plan bana do for gym app" → hinglish
+                                - "mujhe ek REST API chahiye Java mein" → hinglish
+                                - "Write a Python script to scrape websites" → en
+                                - "Mazya sathi ek plan banav" → mr-mix
+                                """),
+                        Map.of("role", "user", "content", text)
+                ),
+                "temperature", 0,
+                "max_tokens", 5
+        );
+
+        String responseBody = webClient.post()
+                .uri(baseUrl + "/chat/completions")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer " + apiKey)
+                .bodyValue(request)
+                .retrieve()
+                .onStatus(
+                        status -> status.isError(),
+                        clientResponse -> clientResponse.bodyToMono(String.class)
+                                .map(body -> new RuntimeException("Groq Error: " + body))
+                )
+                .bodyToMono(String.class)
+                .block(Duration.ofSeconds(30));
+
+        JsonNode response;
+        try {
+            response = objectMapper.readTree(responseBody);
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to parse Groq response", e);
         }
 
-        return "en";
+        String label = response.path("choices")
+                .path(0)
+                .path("message")
+                .path("content")
+                .asText("")
+                .trim()
+                .toLowerCase();
+
+        // Validate the label is one of the expected values
+        if (label.matches("^(en|hi|hinglish|mr|mr-mix)$")) {
+            return label;
+        }
+
+        return "en"; // fallback if unexpected label
     }
 
     private String translateViaGroq(String text) {
