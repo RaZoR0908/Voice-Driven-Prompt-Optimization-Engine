@@ -26,7 +26,6 @@ public class IntentDetectionService {
                                   @Value("${groq.api-key}") String apiKey,
                                   @Value("${groq.base-url}") String baseUrl,
                                   @Value("${groq.model}") String model) {
-
         this.webClient = webClient;
         this.objectMapper = objectMapper;
         this.apiKey = apiKey;
@@ -35,7 +34,6 @@ public class IntentDetectionService {
     }
 
     public IntentResponseDTO extractIntent(String text) {
-
         if (apiKey == null || apiKey.isBlank()) {
             throw new IllegalStateException("GROQ_API_KEY is required");
         }
@@ -43,17 +41,11 @@ public class IntentDetectionService {
         Map<String, Object> request = Map.of(
                 "model", model,
                 "messages", List.of(
-                        Map.of(
-                                "role", "system",
-                                "content", systemPrompt()
-                        ),
-                        Map.of(
-                                "role", "user",
-                                "content", text
-                        )
+                        Map.of("role", "system", "content", systemPrompt()),
+                        Map.of("role", "user", "content", text)
                 ),
                 "temperature", 0,
-                "max_tokens", 500
+                "max_tokens", 300
         );
 
         String responseBody = webClient.post()
@@ -71,14 +63,10 @@ public class IntentDetectionService {
                 .block(Duration.ofSeconds(60));
 
         JsonNode response;
-
         try {
             response = objectMapper.readTree(responseBody);
         } catch (Exception exception) {
-            throw new IllegalStateException(
-                    "Unable to parse Groq response",
-                    exception
-            );
+            throw new IllegalStateException("Unable to parse Groq response", exception);
         }
 
         String content = response.path("choices")
@@ -101,43 +89,63 @@ public class IntentDetectionService {
 
     private String systemPrompt() {
         return """
-                You are an intent extractor.
-                Return ONLY valid JSON.
-
+                You are an intent extractor. Extract intent from user input.
+                Return ONLY valid JSON. No markdown. No explanation. No extra text.
+                
+                STRICT RULES for constraints:
+                - Only include constraints that are EXPLICITLY stated by the user
+                - Do NOT infer or assume constraints not mentioned
+                - Do NOT add target audience, word limits, or format as constraints unless user said so
+                - If no constraints are mentioned, return an empty array []
+                
                 Schema:
                 {
                   "intent": "snake_case_intent_name",
                   "task": "one sentence describing what the user wants",
                   "domain": "single word domain",
-                  "constraints": ["constraint1", "constraint2"],
+                  "constraints": ["only explicit constraints from user input"],
                   "output_format": "bullet_list|paragraph|table|code|numbered_list|short_answer",
                   "audience": "general|developer|business|student|expert"
                 }
-
-                No markdown.
-                No explanations.
-                No code fences.
-                JSON only.
+                
+                Examples:
+                
+                Input: "Create a marketing plan for gym app"
+                Output: {
+                  "intent": "create_marketing_plan",
+                  "task": "Create a marketing plan for gym app",
+                  "domain": "marketing",
+                  "constraints": [],
+                  "output_format": "paragraph",
+                  "audience": "business"
+                }
+                
+                Input: "Write a blog post about AI trends for developers in bullet points under 500 words"
+                Output: {
+                  "intent": "write_blog_post_ai_trends",
+                  "task": "Write a blog post about AI trends for developers",
+                  "domain": "ai",
+                  "constraints": ["bullet points", "under 500 words"],
+                  "output_format": "bullet_list",
+                  "audience": "developer"
+                }
+                
+                No markdown. No code fences. JSON only.
                 """;
     }
 
     private String extractJsonObject(String content) {
-
         String trimmed = content == null ? "" : content.trim();
-
         if (trimmed.startsWith("```")) {
             trimmed = trimmed
                     .replaceFirst("^```(?:json)?\\s*", "")
                     .replaceFirst("\\s*```$", "");
         }
-
         int start = trimmed.indexOf('{');
         int end = trimmed.lastIndexOf('}');
-
         if (start >= 0 && end > start) {
             return trimmed.substring(start, end + 1);
         }
-
         return trimmed;
     }
 }

@@ -60,7 +60,7 @@ public class PromptPipeline {
         // Resolve message first so we can log against it
         Message message = resolveMessage(sessionId, intent);
 
-        // ✅ Log CONFIRM=PASS — user reached this endpoint means they confirmed
+        // Log CONFIRM=PASS — user reached this endpoint means they confirmed
         DecisionLog confirmLog = new DecisionLog();
         confirmLog.setMessage(message);
         confirmLog.setStepName("CONFIRM");
@@ -68,10 +68,10 @@ public class PromptPipeline {
         confirmLog.setDetail("User confirmed intent: " + intent.intent());
         decisionLogRepository.save(confirmLog);
 
-        // ✅ Use intent.task() as source text — not full JSON
-        String sourceText = intent.task() != null && !intent.task().isBlank()
-                ? intent.task()
-                : toJson(intent);
+        // Use raw user input as source text for accurate token reduction measurement
+        String sourceText = message.getRawText() != null && !message.getRawText().isBlank()
+                ? message.getRawText()
+                : intent.task();
 
         String optimizedPrompt = promptTransformService.optimize(intent);
         TokenOptimizerService.TokenStats stats = tokenOptimizerService.calculate(sourceText, optimizedPrompt);
@@ -129,7 +129,7 @@ public class PromptPipeline {
         decisionLogRepository.save(transformLog);
 
         // Memory
-        MemoryService.MemoryDecisionResult memoryDecision = 
+        MemoryService.MemoryDecisionResult memoryDecision =
                 memoryService.recordMemory(message, intent, optimizedPrompt);
 
         return new PromptResponseDTO(
