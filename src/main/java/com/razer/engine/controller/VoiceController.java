@@ -22,8 +22,10 @@ public class VoiceController {
     }
 
     @PostMapping(value = "/input", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<VoiceInputDTO> input(@RequestPart("audio") MultipartFile audio,
-                                               @RequestParam("sessionId") String sessionId) {
-        return ResponseEntity.ok(voicePipeline.process(sessionId, audio));
+    public ResponseEntity<VoiceInputDTO> input(
+            @RequestPart(value = "audio", required = false) MultipartFile audio,
+            @RequestParam("sessionId") String sessionId,
+            @RequestParam(value = "text", required = false) String text) {
+        return ResponseEntity.ok(voicePipeline.process(sessionId, audio, text));
     }
 }

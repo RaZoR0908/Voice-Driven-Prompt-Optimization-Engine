@@ -52,11 +52,12 @@ public class VoicePipeline {
     }
 
     @Transactional
-    public VoiceInputDTO process(String sessionId, MultipartFile audioFile) {
+    public VoiceInputDTO process(String sessionId, MultipartFile audioFile, String text) {
         if (sessionId == null || sessionId.isBlank()) {
             throw new IllegalArgumentException("sessionId is required");
         }
 
+        // Get or create conversation
         Conversation conversation = conversationRepository.findBySessionId(sessionId)
                 .orElseGet(() -> {
                     Conversation created = new Conversation();
@@ -64,29 +65,52 @@ public class VoicePipeline {
                     return conversationRepository.save(created);
                 });
 
-        SpeechToTextService.TranscriptionResult transcription = speechToTextService.transcribe(audioFile);
-        String rawText = transcription.text();
+        // STT or Text bypass
+        String rawText;
+        double confidence;
+
+        if (text != null && !text.isBlank()) {
+            // TEXT INPUT — skip Whisper entirely
+            rawText = text;
+            confidence = 1.0;
+        } else {
+            // AUDIO INPUT — run Whisper STT
+            SpeechToTextService.TranscriptionResult transcription =
+                    speechToTextService.transcribe(audioFile);
+            rawText = transcription.text();
+            confidence = transcription.confidence();
+        }
+
+        // Filter + normalize (runs for both text and audio)
         String filteredText = fillerWordFilter.clean(rawText);
-        LanguageNormalizer.NormalizedText normalizedText = languageNormalizer.normalize(filteredText);
+        LanguageNormalizer.NormalizedText normalizedText =
+                languageNormalizer.normalize(filteredText);
         abuseGuardFilter.guard(normalizedText.text());
 
+        // Save message
         Message message = new Message();
         message.setConversation(conversation);
         message.setRawText(rawText);
         message.setTranscript(normalizedText.text());
-        message.setConfidence(transcription.confidence());
+        message.setConfidence(confidence);
         message.setLanguage(normalizedText.language());
         message = messageRepository.save(message);
 
+        // Log STT step
         DecisionLog sttLog = new DecisionLog();
         sttLog.setMessage(message);
         sttLog.setStepName("STT");
         sttLog.setDecision("PASS");
-        sttLog.setDetail("Transcript produced with confidence=" + transcription.confidence());
+        sttLog.setDetail(text != null && !text.isBlank()
+                ? "Text input — Whisper bypassed"
+                : "Audio transcribed with confidence=" + confidence);
         decisionLogRepository.save(sttLog);
 
-        IntentResponseDTO intent = intentDetectionService.extractIntent(normalizedText.text());
+        // Intent detection
+        IntentResponseDTO intent =
+                intentDetectionService.extractIntent(normalizedText.text());
 
+        // Log intent step
         DecisionLog intentLog = new DecisionLog();
         intentLog.setMessage(message);
         intentLog.setStepName("INTENT");
@@ -95,7 +119,16 @@ public class VoicePipeline {
         decisionLogRepository.save(intentLog);
 
         String intentJson = toJson(intent);
-        return new VoiceInputDTO(sessionId, message.getId(), rawText, normalizedText.text(), transcription.confidence(), normalizedText.language(), intentJson);
+
+        return new VoiceInputDTO(
+                sessionId,
+                message.getId(),
+                rawText,
+                normalizedText.text(),
+                confidence,
+                normalizedText.language(),
+                intentJson
+        );
     }
 
     private String toJson(IntentResponseDTO intent) {
