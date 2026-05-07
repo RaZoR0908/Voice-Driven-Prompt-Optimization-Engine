@@ -57,8 +57,21 @@ public class PromptPipeline {
             throw new IntentNotConfirmedException("Intent confirmation is required before prompt generation");
         }
 
+        // Resolve message first so we can log against it
         Message message = resolveMessage(sessionId, intent);
-        String sourceText = toJson(intent);
+
+        // ✅ Log CONFIRM=PASS — user reached this endpoint means they confirmed
+        DecisionLog confirmLog = new DecisionLog();
+        confirmLog.setMessage(message);
+        confirmLog.setStepName("CONFIRM");
+        confirmLog.setDecision("PASS");
+        confirmLog.setDetail("User confirmed intent: " + intent.intent());
+        decisionLogRepository.save(confirmLog);
+
+        // ✅ Use intent.task() as source text — not full JSON
+        String sourceText = intent.task() != null && !intent.task().isBlank()
+                ? intent.task()
+                : toJson(intent);
 
         String optimizedPrompt = promptTransformService.optimize(intent);
         TokenOptimizerService.TokenStats stats = tokenOptimizerService.calculate(sourceText, optimizedPrompt);
@@ -72,6 +85,7 @@ public class PromptPipeline {
             failedValidation.setDetail(validationResult.reason());
             decisionLogRepository.save(failedValidation);
 
+            // Retry once
             optimizedPrompt = promptTransformService.optimize(intent);
             stats = tokenOptimizerService.calculate(sourceText, optimizedPrompt);
             validationResult = validationService.validate(intent, sourceText, optimizedPrompt);
@@ -81,19 +95,22 @@ public class PromptPipeline {
             }
         }
 
+        // Log validation pass
         DecisionLog passedValidation = new DecisionLog();
         passedValidation.setMessage(message);
-        passedValidation.setStepName("VALIDATE");
-        passedValidation.setDecision("PASS");
-        passedValidation.setDetail(validationResult.reason());
+        passedValidation.setStepName("VALIDATION");
+        passedValidation.setDecision("COMPLETED");
+        passedValidation.setDetail("Token reduction: " + String.format("%.0f", stats.reductionPct()) + "%");
         decisionLogRepository.save(passedValidation);
 
+        // Update message
         message.setOptimizedPrompt(optimizedPrompt);
         message.setTokenInput(stats.inputTokens());
         message.setTokenOutput(stats.outputTokens());
         message.setReductionPct(stats.reductionPct());
         message = messageRepository.save(message);
 
+        // Save prompt log
         PromptLog promptLog = new PromptLog();
         promptLog.setMessage(message);
         promptLog.setRawText(sourceText);
@@ -103,14 +120,17 @@ public class PromptPipeline {
         promptLog.setReductionPct(stats.reductionPct());
         promptLogRepository.save(promptLog);
 
+        // Log transform
         DecisionLog transformLog = new DecisionLog();
         transformLog.setMessage(message);
         transformLog.setStepName("TRANSFORM");
-        transformLog.setDecision("PASS");
-        transformLog.setDetail("Prompt optimized successfully");
+        transformLog.setDecision("COMPLETED");
+        transformLog.setDetail("CAVEMAN MODE applied");
         decisionLogRepository.save(transformLog);
 
-        MemoryService.MemoryDecisionResult memoryDecision = memoryService.recordMemory(message, intent, optimizedPrompt);
+        // Memory
+        MemoryService.MemoryDecisionResult memoryDecision = 
+                memoryService.recordMemory(message, intent, optimizedPrompt);
 
         return new PromptResponseDTO(
                 optimizedPrompt,
@@ -125,7 +145,8 @@ public class PromptPipeline {
 
     private Message resolveMessage(String sessionId, IntentResponseDTO intent) {
         if (sessionId != null && !sessionId.isBlank()) {
-            return messageRepository.findFirstByConversation_SessionIdOrderByCreatedAtDesc(sessionId)
+            return messageRepository
+                    .findFirstByConversation_SessionIdOrderByCreatedAtDesc(sessionId)
                     .orElseGet(() -> createOrphanMessage(intent));
         }
         return createOrphanMessage(intent);
