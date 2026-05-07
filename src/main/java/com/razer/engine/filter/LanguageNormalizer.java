@@ -1,112 +1,126 @@
 package com.razer.engine.filter;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
 
-import java.util.HashMap;
+import java.time.Duration;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 @Component
 public class LanguageNormalizer {
 
-    private static final Map<String, String> HINDI_TO_ENGLISH = new HashMap<>();
+    private final WebClient webClient;
+    private final ObjectMapper objectMapper;
+    private final String apiKey;
+    private final String baseUrl;
+    private final String model;
 
-    static {
-
-        HINDI_TO_ENGLISH.put("मार्केटिंग", "marketing");
-        HINDI_TO_ENGLISH.put("प्लान", "plan");
-        HINDI_TO_ENGLISH.put("बनाओ", "create");
-        HINDI_TO_ENGLISH.put("शॉर्ट", "short");
-        HINDI_TO_ENGLISH.put("ऐप", "app");
-        HINDI_TO_ENGLISH.put("रणनीति", "strategy");
-        HINDI_TO_ENGLISH.put("के लिए", "for");
-        HINDI_TO_ENGLISH.put("अंदर", "under");
-        HINDI_TO_ENGLISH.put("वर्ड्स", "words");
+    public LanguageNormalizer(WebClient webClient,
+                               ObjectMapper objectMapper,
+                               @Value("${groq.api-key}") String apiKey,
+                               @Value("${groq.base-url}") String baseUrl,
+                               @Value("${groq.model}") String model) {
+        this.webClient = webClient;
+        this.objectMapper = objectMapper;
+        this.apiKey = apiKey;
+        this.baseUrl = baseUrl;
+        this.model = model;
     }
 
     public NormalizedText normalize(String input) {
-
-        String text = input == null
-                ? ""
-                : input.trim().replaceAll("\\s+", " ");
-
+        String text = input == null ? "" : input.trim().replaceAll("\\s+", " ");
         String language = detectLanguage(text);
 
-        String normalized = replaceCommonHinglish(text);
-
+        String normalized = text;
         if (!language.equals("en")) {
-            normalized = translateToEnglish(normalized);
+            try {
+                normalized = translateViaGroq(text);
+            } catch (Exception e) {
+                normalized = text; // fallback to original if Groq fails
+            }
         }
 
-        return new NormalizedText(
-                normalized,
-                language
-        );
+        return new NormalizedText(normalized, language);
     }
 
     public String detectLanguage(String input) {
-
-        if (input == null || input.isBlank()) {
-            return "en";
-        }
+        if (input == null || input.isBlank()) return "en";
 
         if (containsDevanagari(input)) {
-            return "hi";
+            // Check if it also has English words mixed in
+            String lower = input.toLowerCase(Locale.ROOT);
+            boolean hasEnglish = lower.matches(".*[a-z]+.*");
+            return hasEnglish ? "mr-mix" : "hi";
         }
 
         String lower = input.toLowerCase(Locale.ROOT);
-
-        if (lower.matches(".*\\b(yaar|bhai|arrey|kya|kaise|kar do|bana do|thoda|please|plz)\\b.*")) {
+        if (lower.matches(".*\\b(yaar|bhai|arrey|kya|kaise|kar do|bana do|thoda|plz|ek|do|teen|hai|hain|nahi|aur|ke liye)\\b.*")) {
             return "hinglish";
         }
 
         return "en";
     }
 
-    private String replaceCommonHinglish(String text) {
+    private String translateViaGroq(String text) {
+        Map<String, Object> request = Map.of(
+                "model", model,
+                "messages", List.of(
+                        Map.of("role", "system", "content", """
+                                Translate the following text to English.
+                                Rules:
+                                - Preserve the original meaning exactly
+                                - Output ONLY the English translation
+                                - No explanation, no notes, no quotes around the output
+                                - Handle mixed Hindi-English (Hinglish) and Marathi naturally
+                                """),
+                        Map.of("role", "user", "content", text)
+                ),
+                "temperature", 0,
+                "max_tokens", 200
+        );
 
-        String normalized = text;
+        String responseBody = webClient.post()
+                .uri(baseUrl + "/chat/completions")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer " + apiKey)
+                .bodyValue(request)
+                .retrieve()
+                .onStatus(
+                        status -> status.isError(),
+                        clientResponse -> clientResponse.bodyToMono(String.class)
+                                .map(body -> new RuntimeException("Groq Error: " + body))
+                )
+                .bodyToMono(String.class)
+                .block(Duration.ofSeconds(30));
 
-        normalized = normalized.replaceAll("(?i)\\b(please|plz)\\b", "");
-        normalized = normalized.replaceAll("(?i)\\b(yaar|bhai|arrey)\\b", "");
-
-        normalized = normalized.replaceAll("\\s+", " ").trim();
-
-        return normalized;
-    }
-
-    private String translateToEnglish(String text) {
-
-        String translated = text;
-
-        for (Map.Entry<String, String> entry : HINDI_TO_ENGLISH.entrySet()) {
-
-            translated = translated.replace(
-                    entry.getKey(),
-                    entry.getValue()
-            );
+        JsonNode response;
+        try {
+            response = objectMapper.readTree(responseBody);
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to parse Groq response", e);
         }
 
-        return translated;
+        return response.path("choices")
+                .path(0)
+                .path("message")
+                .path("content")
+                .asText("")
+                .trim();
     }
 
     private boolean containsDevanagari(String text) {
-
-        for (int index = 0; index < text.length(); index++) {
-
-            char character = text.charAt(index);
-
-            if (character >= '\u0900' && character <= '\u097F') {
-                return true;
-            }
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c >= '\u0900' && c <= '\u097F') return true;
         }
-
         return false;
     }
 
-    public record NormalizedText(
-            String text,
-            String language
-    ) {
-    }
+    public record NormalizedText(String text, String language) {}
 }
