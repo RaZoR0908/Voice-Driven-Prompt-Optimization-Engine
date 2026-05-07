@@ -68,41 +68,43 @@ public class LanguageNormalizer {
                 "model", model,
                 "messages", List.of(
                         Map.of("role", "system", "content", """
-                                Detect the language of the following text.
-                                Output ONLY one of these labels: English, Hindi, Hinglish
-                                Do not output anything else, no explanation, no notes.
+                                You are a language classifier. Analyze text and classify into ONE category:
                                 
-                                Label definitions:
-                                - English → Text written entirely in English, including technical terms, coding, business content. No Hindi or Urdu words present.
-                                - Hindi → Text written entirely in Devanagari script with no Latin characters at all.
-                                - Hinglish → Text written in Latin script that contains ANY Hindi or Urdu words mixed with English. If a sentence has even one Hindi word written in Latin script mixed with English words — it is Hinglish, not English or Hindi. The sentence does not need to be 50/50 mix — even one Hindi word makes it Hinglish.
+                                CLASSIFICATION RULES (Apply in order):
                                 
-                                English Examples:
-                                - "Help me write a blog post about AI"
-                                - "Write a Python script to scrape websites"
-                                - "Create a REST API for user authentication in Java"
-                                - "Write a Node.js REST API for managing user profiles with JWT authentication"
-                                - "Create a formal email template for job application"
-                                - "Help me build a machine learning model"
-                                - "Write unit tests for my React components"
-                                - "Design a database schema for an e-commerce platform"
-                                - "Explain quantum computing concepts"
-                                - "Write a technical documentation for an API"
+                                1. HINDI: Is the text written ONLY in Devanagari script?
+                                   - Devanagari characters look like: क, ख, ग, घ, च, छ, ज, झ, ट, ठ, ड, ढ, त, थ, द, ध, न, प, फ, ब, भ, म, य, र, ल, व, श, ष, स, ह
+                                   - Must have ZERO Latin alphabet characters
+                                   - If YES → output "Hindi"
                                 
-                                Hinglish Examples:
-                                - "Ek marketing plan bana do for gym app"
-                                - "mujhe ek REST API chahiye Java mein"
-                                - "email template banao job ke liye"
-                                - "presentation bana do students ke liye"
-                                - "app ke liye user interface design karo"
-                                - "database design karo e-commerce ke liye"
-                                - "ek blog post likho AI ke baare mein"
-                                - "Python mein web scraping script banao"
+                                2. HINGLISH: Is text written in Latin script that contains words from Indian languages (Hindi/Urdu/Sanskrit)?
+                                   - How to identify Indian language words in Latin script:
+                                     a) Words that don't appear in standard English dictionaries
+                                     b) Words with typical Hindi/Urdu phonetic patterns (like words ending in -o, -ey, -ay, -ya, -na when they're clearly not English)
+                                     c) Words that are transliterated from Devanagari (like "banao" from बनाओ, "chahiye" from चाहिए, "mujhe" from मुझे, "karo" from करो)
+                                     d) Even if you see JUST ONE such Indian language word mixed with English words → HINGLISH
+                                   - Examples: "mujhe", "banao", "chahiye", "karo", "likho", "bata", "suno", "dekho", "aur", "hain", "liye", "baare", "se", "ke", "ko", "ki", "mein", "ek", "tha", "hoga", etc.
+                                   - If YES (any Indian language word found) → output "Hinglish"
+                                
+                                3. ENGLISH: All words appear to be from English language only
+                                   - Words match English dictionary entries or English patterns
+                                   - No Indian language vocabulary mixed in
+                                   - If YES → output "English"
+                                
+                                EXAMPLES TO UNDERSTAND THE LOGIC:
+                                - "Build a dashboard using React" → ENGLISH (all words are English)
+                                - "Ek dashboard banao React se" → HINGLISH (contains "ek", "banao", "se" - Indian words)
+                                - "Dashboard create karo" → HINGLISH (contains "karo" - Indian word)
+                                - "मुझे एक डिज़ाइन चाहिए" → HINDI (all Devanagari)
+                                - "Help me fix this bug" → ENGLISH (all English)
+                                - "Help mujhe fix this bug" → HINGLISH (contains "mujhe" - Indian word)
+                                
+                                Output ONLY the label: English, Hindi, or Hinglish
                                 """),
                         Map.of("role", "user", "content", text)
                 ),
                 "temperature", 0,
-                "max_tokens", 5
+                "max_tokens", 1
         );
 
         String responseBody = webClient.post()
@@ -131,19 +133,22 @@ public class LanguageNormalizer {
                 .path("message")
                 .path("content")
                 .asText("")
-                .trim();
+                .trim()
+                .replaceAll("[^a-zA-Z]", ""); // Remove any non-letter characters
 
-        // Normalize to proper case
-        if (label.equalsIgnoreCase("english")) {
+        // Strict validation - only accept exact matches
+        if ("English".equalsIgnoreCase(label)) {
             return "English";
         }
-        if (label.equalsIgnoreCase("hindi")) {
+        if ("Hindi".equalsIgnoreCase(label)) {
             return "Hindi";
         }
-        if (label.equalsIgnoreCase("hinglish")) {
+        if ("Hinglish".equalsIgnoreCase(label)) {
             return "Hinglish";
         }
 
+        // Default to English if response is invalid
+        System.err.println("WARNING: Unexpected language label from Groq: '" + label + "' for text: '" + text + "'");
         return "English";
     }
 
