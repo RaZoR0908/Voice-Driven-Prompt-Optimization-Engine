@@ -23,7 +23,7 @@ public class LanguageNormalizer {
     // Common Hindi/Urdu words in Latin script that ALWAYS indicate Hinglish
     private static final Set<String> HINDI_URDU_KEYWORDS = Set.of(
             // Common verbs
-            "banao", "bana", "banate", "banana", "banate", "banai", "banega",
+            "banao", "bana", "banana", "banate", "banai", "banega",
             "karo", "kar", "karta", "karega", "karenge", "kari", "karni", "karna",
             "likho", "likha", "likhna", "likhni", "likhte", "likhai",
             "dekho", "dekha", "dekhna", "dekhai", "dekhte",
