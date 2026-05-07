@@ -74,12 +74,27 @@ public class LanguageNormalizer {
                                 Output ONLY one of these labels: en, hi, hinglish, mr, mr-mix
                                 Do not output anything else, no explanation, no notes.
                                 
+                                Label definitions:
+                                - en → pure English (even if it contains technical terms like JWT, API, Node.js, Python)
+                                - hi → pure Hindi in Devanagari script
+                                - hinglish → mix of Hindi words in Latin script + English words
+                                - mr → pure Marathi
+                                - mr-mix → mix of Marathi + English
+                                
                                 Examples:
                                 - "Help me write a blog post about AI" → en
+                                - "Write a Python script to scrape websites" → en
+                                - "Create a REST API for user authentication in Java" → en
+                                - "Write a Node.js REST API for managing user profiles with JWT authentication" → en
+                                - "Create a formal email template for job application" → en
+                                - "Help me build a machine learning model in Python" → en
+                                - "Write unit tests for my React components" → en
                                 - "Ek marketing plan bana do for gym app" → hinglish
                                 - "mujhe ek REST API chahiye Java mein" → hinglish
-                                - "Write a Python script to scrape websites" → en
+                                - "email template banao job ke liye" → hinglish
+                                - "presentation bana do students ke liye" → hinglish
                                 - "Mazya sathi ek plan banav" → mr-mix
+                                - "Mala ek presentation karaychi aahe" → mr-mix
                                 """),
                         Map.of("role", "user", "content", text)
                 ),
