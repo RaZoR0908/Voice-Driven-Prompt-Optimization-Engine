@@ -48,6 +48,7 @@ public class MemoryService {
         List<Memory> memories = memoryRepository.findAllByOrderByUpdatedAtDesc();
         MemoryAllocator.AllocationResult allocation = memoryAllocator.allocate(intent, optimizedPrompt, memories);
         Memory chosenMemory = null;
+        String sessionId = message.getConversation() != null ? message.getConversation().getSessionId() : null;
 
         switch (allocation.decision()) {
             case MERGE -> {
@@ -56,6 +57,7 @@ public class MemoryService {
             }
             case SAVE_CHILD, SAVE_NEW -> {
                 Memory memory = new Memory();
+                memory.setSessionId(sessionId);
                 memory.setDomain(intent.domain());
                 memory.setTask(intent.task());
                 memory.setOptimizedPrompt(optimizedPrompt);
@@ -86,8 +88,14 @@ public class MemoryService {
         return new MemoryDecisionResult(allocation.decision().name(), allocation.similarityScore(), chosenMemory);
     }
 
-    public List<MemoryCardDTO> listCards() {
-        return memoryRepository.findAllByOrderByUpdatedAtDesc().stream()
+    public List<MemoryCardDTO> listCards(String sessionId) {
+        List<Memory> memories;
+        if (sessionId != null && !sessionId.isEmpty()) {
+            memories = memoryRepository.findBySessionIdOrderByUpdatedAtDesc(sessionId);
+        } else {
+            memories = memoryRepository.findAllByOrderByUpdatedAtDesc();
+        }
+        return memories.stream()
                 .map(memory -> new MemoryCardDTO(memory.getId(), memory.getDomain(), memory.getTask(), memory.getOptimizedPrompt(), safeInt(memory.getUseCount()), memory.getUpdatedAt()))
                 .toList();
     }

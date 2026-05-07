@@ -8,4 +8,6 @@ import java.util.UUID;
 
 public interface MemoryRepository extends JpaRepository<Memory, UUID> {
     List<Memory> findAllByOrderByUpdatedAtDesc();
+
+    List<Memory> findBySessionIdOrderByUpdatedAtDesc(String sessionId);
 }

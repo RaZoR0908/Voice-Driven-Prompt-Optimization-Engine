@@ -19,6 +19,9 @@ public class Memory {
     @GeneratedValue(strategy = jakarta.persistence.GenerationType.UUID)
     private UUID id;
 
+    @Column(name = "session_id", length = 100)
+    private String sessionId;
+
     @Column(name = "domain", length = 50)
     private String domain;
 
@@ -55,6 +58,14 @@ public class Memory {
 
     public void setId(UUID id) {
         this.id = id;
+    }
+
+    public String getSessionId() {
+        return sessionId;
+    }
+
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
     }
 
     public String getDomain() {
