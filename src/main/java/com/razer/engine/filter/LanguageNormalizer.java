@@ -73,9 +73,9 @@ public class LanguageNormalizer {
                                 Do not output anything else, no explanation, no notes.
                                 
                                 Label definitions:
-                                - English → pure English (includes all technical terms, coding, business content)
-                                - Hindi → pure Hindi in Devanagari script only
-                                - Hinglish → mix of Hindi/Marathi words in Latin script + English words
+                                - English → Text written entirely in English, including technical terms, coding, business content. No Hindi or Urdu words present.
+                                - Hindi → Text written entirely in Devanagari script with no Latin characters at all.
+                                - Hinglish → Text written in Latin script that contains ANY Hindi or Urdu words mixed with English. If a sentence has even one Hindi word written in Latin script mixed with English words — it is Hinglish, not English or Hindi. The sentence does not need to be 50/50 mix — even one Hindi word makes it Hinglish.
                                 
                                 English Examples:
                                 - "Help me write a blog post about AI"
