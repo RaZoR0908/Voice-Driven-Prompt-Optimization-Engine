@@ -11,6 +11,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class PromptTransformService {
@@ -20,6 +21,9 @@ public class PromptTransformService {
     private final String apiKey;
     private final String baseUrl;
     private final String model;
+
+    // Default formats that don't need to be explicitly sent
+    private static final Set<String> DEFAULT_FORMATS = Set.of("paragraph", "short_answer");
 
     public PromptTransformService(WebClient webClient,
                                   ObjectMapper objectMapper,
@@ -114,12 +118,18 @@ public class PromptTransformService {
     private String buildUserMessage(IntentResponseDTO intent) {
         StringBuilder sb = new StringBuilder();
         sb.append("Task: ").append(intent.task());
+
         if (intent.constraints() != null && !intent.constraints().isEmpty()) {
             sb.append("\nConstraints: ").append(String.join(", ", intent.constraints()));
         }
-        if (intent.outputFormat() != null && !intent.outputFormat().isBlank()) {
+
+        // Only send format if user explicitly specified a non-default format
+        if (intent.outputFormat() != null
+                && !intent.outputFormat().isBlank()
+                && !DEFAULT_FORMATS.contains(intent.outputFormat().toLowerCase().trim())) {
             sb.append("\nFormat: ").append(intent.outputFormat());
         }
+
         return sb.toString();
     }
 
