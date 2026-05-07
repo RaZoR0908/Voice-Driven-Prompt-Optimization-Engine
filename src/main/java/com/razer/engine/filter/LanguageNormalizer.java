@@ -38,7 +38,7 @@ public class LanguageNormalizer {
         String language = detectLanguage(text);
 
         String normalized = text;
-        if (!language.equals("en")) {
+        if (!language.equals("English")) {
             try {
                 normalized = translateViaGroq(text);
             } catch (Exception e) {
@@ -50,18 +50,16 @@ public class LanguageNormalizer {
     }
 
     public String detectLanguage(String input) {
-        if (input == null || input.isBlank()) return "en";
+        if (input == null || input.isBlank()) return "English";
 
         if (containsDevanagari(input)) {
-            String lower = input.toLowerCase(Locale.ROOT);
-            boolean hasEnglish = lower.matches(".*[a-z]+.*");
-            return hasEnglish ? "mr-mix" : "hi";
+            return "Hindi";
         }
 
         try {
             return detectLanguageViaGroq(input);
         } catch (Exception e) {
-            return "en";
+            return "English";
         }
     }
 
@@ -71,30 +69,35 @@ public class LanguageNormalizer {
                 "messages", List.of(
                         Map.of("role", "system", "content", """
                                 Detect the language of the following text.
-                                Output ONLY one of these labels: en, hi, hinglish, mr, mr-mix
+                                Output ONLY one of these labels: English, Hindi, Hinglish
                                 Do not output anything else, no explanation, no notes.
                                 
                                 Label definitions:
-                                - en → pure English (even if it contains technical terms like JWT, API, Node.js, Python)
-                                - hi → pure Hindi in Devanagari script
-                                - hinglish → mix of Hindi words in Latin script + English words
-                                - mr → pure Marathi
-                                - mr-mix → mix of Marathi + English
+                                - English → pure English (includes all technical terms, coding, business content)
+                                - Hindi → pure Hindi in Devanagari script only
+                                - Hinglish → mix of Hindi/Marathi words in Latin script + English words
                                 
-                                Examples:
-                                - "Help me write a blog post about AI" → en
-                                - "Write a Python script to scrape websites" → en
-                                - "Create a REST API for user authentication in Java" → en
-                                - "Write a Node.js REST API for managing user profiles with JWT authentication" → en
-                                - "Create a formal email template for job application" → en
-                                - "Help me build a machine learning model in Python" → en
-                                - "Write unit tests for my React components" → en
-                                - "Ek marketing plan bana do for gym app" → hinglish
-                                - "mujhe ek REST API chahiye Java mein" → hinglish
-                                - "email template banao job ke liye" → hinglish
-                                - "presentation bana do students ke liye" → hinglish
-                                - "Mazya sathi ek plan banav" → mr-mix
-                                - "Mala ek presentation karaychi aahe" → mr-mix
+                                English Examples:
+                                - "Help me write a blog post about AI"
+                                - "Write a Python script to scrape websites"
+                                - "Create a REST API for user authentication in Java"
+                                - "Write a Node.js REST API for managing user profiles with JWT authentication"
+                                - "Create a formal email template for job application"
+                                - "Help me build a machine learning model"
+                                - "Write unit tests for my React components"
+                                - "Design a database schema for an e-commerce platform"
+                                - "Explain quantum computing concepts"
+                                - "Write a technical documentation for an API"
+                                
+                                Hinglish Examples:
+                                - "Ek marketing plan bana do for gym app"
+                                - "mujhe ek REST API chahiye Java mein"
+                                - "email template banao job ke liye"
+                                - "presentation bana do students ke liye"
+                                - "app ke liye user interface design karo"
+                                - "database design karo e-commerce ke liye"
+                                - "ek blog post likho AI ke baare mein"
+                                - "Python mein web scraping script banao"
                                 """),
                         Map.of("role", "user", "content", text)
                 ),
@@ -128,14 +131,20 @@ public class LanguageNormalizer {
                 .path("message")
                 .path("content")
                 .asText("")
-                .trim()
-                .toLowerCase();
+                .trim();
 
-        if (label.matches("^(en|hi|hinglish|mr|mr-mix)$")) {
-            return label;
+        // Normalize to proper case
+        if (label.equalsIgnoreCase("english")) {
+            return "English";
+        }
+        if (label.equalsIgnoreCase("hindi")) {
+            return "Hindi";
+        }
+        if (label.equalsIgnoreCase("hinglish")) {
+            return "Hinglish";
         }
 
-        return "en";
+        return "English";
     }
 
     private String translateViaGroq(String text) {
