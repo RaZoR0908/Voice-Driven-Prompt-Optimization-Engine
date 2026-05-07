@@ -8,9 +8,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.Duration;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
+import java.util.regex.Pattern;
 
 @Component
 public class LanguageNormalizer {
@@ -20,6 +19,56 @@ public class LanguageNormalizer {
     private final String apiKey;
     private final String baseUrl;
     private final String model;
+
+    // Common Hindi/Urdu words in Latin script that ALWAYS indicate Hinglish
+    private static final Set<String> HINDI_URDU_KEYWORDS = Set.of(
+            // Common verbs
+            "banao", "bana", "banate", "banana", "banate", "banai", "banega",
+            "karo", "kar", "karta", "karega", "karenge", "kari", "karni", "karna",
+            "likho", "likha", "likhna", "likhni", "likhte", "likhai",
+            "dekho", "dekha", "dekhna", "dekhai", "dekhte",
+            "batao", "bata", "batai", "batane",
+            "suno", "suna", "sunna", "sunai", "sunte",
+            "do", "dena", "denge", "dengi", "dete",
+            "lo", "lena", "lenge", "lengi", "lete",
+            "chaho", "chahta", "chahte", "chahtai", "chahiye",
+            // Common nouns and adjectives
+            "mujhe", "mujhko", "mujhs",
+            "tujhe", "tujhko", "tumhe",
+            "usko", "unhe", "inhe", "isko",
+            "ek", "eka", "ekk",
+            "jo", "jo", "jab", "jaha", "jahaan",
+            "aur", "aor",
+            "hai", "hain", "tha", "the", "thi", "the",
+            "hoga", "honge", "honi", "hongi",
+            "ho", "hoon", "ho",
+            "ke", "ka", "ki",
+            "se", "se", "sa",
+            "par", "par",
+            "liye", "ke_liye",
+            "mein", "me",
+            "baare", "bare", "baare",
+            // Interrogative
+            "kya", "kaun", "kahan", "kaise", "kitna",
+            // More verbs
+            "banta", "bantai", "bante",
+            "bhejao", "bheja", "bhejte",
+            "manga", "maanga", "maangi", "mange", "mangi",
+            "aao", "aaya", "aayi", "aate", "aayi", "aaiye",
+            "jao", "gaya", "gayi", "jate", "jati", "jaye",
+            "aata", "aati", "aate",
+            "ata", "ati", "ate",
+            "leta", "leti", "lete",
+            "leta", "leta", "letin",
+            "dena", "deni", "dengi", "denge", "dete",
+            "lete", "lena", "leni", "lengi", "lenge",
+            "chaldi", "chhaldi", "chalti", "chalte",
+            "phir", "phira", "phire",
+            "pada", "padai", "padte",
+            "padhna", "padhni", "padhai",
+            "lagna", "lagni", "lagi", "lagte",
+            "ana", "ani", "aati", "aatige"
+    );
 
     public LanguageNormalizer(WebClient webClient,
                                ObjectMapper objectMapper,
@@ -52,15 +101,66 @@ public class LanguageNormalizer {
     public String detectLanguage(String input) {
         if (input == null || input.isBlank()) return "English";
 
+        // Step 1: Check for Devanagari script (pure Hindi)
         if (containsDevanagari(input)) {
             return "Hindi";
         }
 
+        // Step 2: Check for known Hindi/Urdu keywords (local detection - faster and more reliable)
+        String hinglishDetection = detectHinglishLocal(input);
+        if (hinglishDetection.equals("Hinglish")) {
+            return "Hinglish";
+        }
+
+        // Step 3: Fall back to LLM for edge cases
         try {
             return detectLanguageViaGroq(input);
         } catch (Exception e) {
             return "English";
         }
+    }
+
+    /**
+     * Local Hinglish detection using known Hindi/Urdu keywords in Latin script
+     * This is MUCH faster and more reliable than LLM for obvious cases
+     */
+    private String detectHinglishLocal(String text) {
+        String lowerText = text.toLowerCase();
+        String[] words = lowerText.split("\\s+|[.,!?;:\"]");
+        
+        int hindiWordCount = 0;
+        int englishWordCount = 0;
+
+        for (String word : words) {
+            if (word.isEmpty()) continue;
+            
+            // Check if word or word variants match Hindi/Urdu keywords
+            String cleanWord = word.replaceAll("[^a-z]", "");
+            if (HINDI_URDU_KEYWORDS.contains(cleanWord)) {
+                hindiWordCount++;
+            } else if (isEnglishWord(cleanWord)) {
+                englishWordCount++;
+            }
+        }
+
+        // If found ANY Hindi word + English words = Hinglish
+        if (hindiWordCount > 0 && englishWordCount > 0) {
+            return "Hinglish";
+        }
+        
+        // If mostly Hindi words with few English = Hinglish
+        if (hindiWordCount > 0 && englishWordCount >= 0) {
+            return "Hinglish";
+        }
+
+        return "English"; // Default
+    }
+
+    private boolean isEnglishWord(String word) {
+        // Simple check: English words are typically longer and don't match Hindi patterns
+        if (word.length() <= 2) return false;
+        // Very basic check - if it looks like common English patterns
+        return word.matches("[a-z]+");
     }
 
     private String detectLanguageViaGroq(String text) {
