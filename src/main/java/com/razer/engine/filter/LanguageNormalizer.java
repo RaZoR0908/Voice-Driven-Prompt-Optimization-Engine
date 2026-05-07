@@ -22,53 +22,59 @@ public class LanguageNormalizer {
 
     // Common Hindi/Urdu words in Latin script that ALWAYS indicate Hinglish
     private static final Set<String> HINDI_URDU_KEYWORDS = Set.of(
-            // Common verbs
-            "banao", "bana", "banana", "banate", "banai", "banega",
-            "karo", "kar", "karta", "karega", "karenge", "kari", "karni", "karna",
-            "likho", "likha", "likhna", "likhni", "likhte", "likhai",
-            "dekho", "dekha", "dekhna", "dekhai", "dekhte",
-            "batao", "bata", "batai", "batane",
-            "suno", "suna", "sunna", "sunai", "sunte",
-            "do", "dena", "denge", "dengi", "dete",
-            "lo", "lena", "lenge", "lengi", "lete",
-            "chaho", "chahta", "chahte", "chahtai", "chahiye",
-            // Common nouns and adjectives
-            "mujhe", "mujhko", "mujhs",
-            "tujhe", "tujhko", "tumhe",
-            "usko", "unhe", "inhe", "isko",
-            "ek", "eka", "ekk",
-            "jo", "jo", "jab", "jaha", "jahaan",
-            "aur", "aor",
-            "hai", "hain", "tha", "the", "thi", "the",
-            "hoga", "honge", "honi", "hongi",
-            "ho", "hoon", "ho",
-            "ke", "ka", "ki",
-            "se", "se", "sa",
-            "par", "par",
-            "liye", "ke_liye",
-            "mein", "me",
-            "baare", "bare", "baare",
-            // Interrogative
-            "kya", "kaun", "kahan", "kaise", "kitna",
-            // More verbs
-            "banta", "bantai", "bante",
-            "bhejao", "bheja", "bhejte",
-            "manga", "maanga", "maangi", "mange", "mangi",
-            "aao", "aaya", "aayi", "aate", "aayi", "aaiye",
-            "jao", "gaya", "gayi", "jate", "jati", "jaye",
-            "aata", "aati", "aate",
-            "ata", "ati", "ate",
-            "leta", "leti", "lete",
-            "leta", "leta", "letin",
-            "dena", "deni", "dengi", "denge", "dete",
-            "lete", "lena", "leni", "lengi", "lenge",
-            "chaldi", "chhaldi", "chalti", "chalte",
-            "phir", "phira", "phire",
-            "pada", "padai", "padte",
-            "padhna", "padhni", "padhai",
-            "lagna", "lagni", "lagi", "lagte",
-            "ana", "ani", "aati", "aatige"
-    );
+
+        // Common verbs
+        "banao", "bana", "banana", "banate", "banai", "banega",
+        "karo", "kar", "karta", "karega", "karenge", "kari", "karni", "karna",
+        "likho", "likha", "likhna", "likhni", "likhte", "likhai",
+        "dekho", "dekha", "dekhna", "dekhai", "dekhte",
+        "batao", "bata", "batai", "batane",
+        "suno", "suna", "sunna", "sunai", "sunte",
+        "do", "dena", "denge", "dengi", "dete",
+        "lo", "lena", "lenge", "lengi", "lete",
+        "chaho", "chahta", "chahte", "chahtai", "chahiye",
+
+        // Pronouns
+        "mujhe", "mujhko", "mujhs",
+        "tujhe", "tujhko", "tumhe",
+        "usko", "unhe", "inhe", "isko",
+
+        // Common words
+        "ek", "eka", "ekk",
+        "jo", "jab", "jaha", "jahaan",
+        "aur", "aor",
+        "hai", "hain", "tha", "the", "thi",
+        "hoga", "honge", "honi", "hongi",
+        "ho", "hoon",
+        "ke", "ka", "ki",
+        "se", "sa",
+        "par",
+        "liye", "ke_liye",
+        "mein", "me",
+        "baare", "bare",
+
+        // Interrogative
+        "kya", "kaun", "kahan", "kaise", "kitna",
+
+        // More verbs
+        "banta", "bantai", "bante",
+        "bhejao", "bheja", "bhejte",
+        "manga", "maanga", "maangi", "mange", "mangi",
+        "aao", "aaya", "aayi", "aate", "aaiye",
+        "jao", "gaya", "gayi", "jate", "jati", "jaye",
+        "aata", "aati",
+        "ata", "ati", "ate",
+        "leta", "leti",
+        "letin",
+        "deni",
+        "leni",
+        "chaldi", "chhaldi", "chalti", "chalte",
+        "phir", "phira", "phire",
+        "pada", "padai", "padte",
+        "padhna", "padhni", "padhai",
+        "lagna", "lagni", "lagi", "lagte",
+        "ana", "ani", "aatige"
+);
 
     public LanguageNormalizer(WebClient webClient,
                                ObjectMapper objectMapper,
