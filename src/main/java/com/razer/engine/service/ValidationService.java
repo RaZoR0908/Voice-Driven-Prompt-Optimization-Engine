@@ -16,7 +16,7 @@ public class ValidationService {
     private final double minimumReductionPct;
 
     // If input is under this many tokens, skip reduction threshold check
-    private static final int SHORT_INPUT_THRESHOLD = 20;
+    private static final int SHORT_INPUT_THRESHOLD = 50;
 
     public ValidationService(TokenOptimizerService tokenOptimizerService,
                              @Value("${app.validation.min-reduction-pct:30}") double minimumReductionPct) {
