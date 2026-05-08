@@ -56,13 +56,13 @@ public class VoicePipeline {
     }
 
     @Transactional
-    public VoiceInputDTO process(String sessionId, MultipartFile audioFile, String text, String clientTimestamp) {
+    public VoiceInputDTO process(String sessionId, MultipartFile audioFile, String text, String clientTimestamp, Integer clientTimezoneOffset) {
         if (sessionId == null || sessionId.isBlank()) {
             throw new IllegalArgumentException("sessionId is required");
         }
 
-        // Parse client timestamp to LocalDateTime
-        LocalDateTime messageTimestamp = parseClientTimestamp(clientTimestamp);
+        // Parse client timestamp and timezone to get actual local time
+        LocalDateTime messageTimestamp = parseClientTimestamp(clientTimestamp, clientTimezoneOffset);
 
         // Get or create conversation
         Conversation conversation = conversationRepository.findBySessionId(sessionId)
@@ -141,14 +141,24 @@ public class VoicePipeline {
         );
     }
 
-    private LocalDateTime parseClientTimestamp(String clientTimestamp) {
+    private LocalDateTime parseClientTimestamp(String clientTimestamp, Integer clientTimezoneOffset) {
         if (clientTimestamp == null || clientTimestamp.isBlank()) {
             return LocalDateTime.now();
         }
 
         try {
-            // Handle ISO 8601 format (e.g., "2026-05-07T12:49:40.647521Z")
+            // Parse ISO 8601 UTC timestamp (e.g., "2026-05-08T08:41:45.778000Z")
             OffsetDateTime offsetDateTime = OffsetDateTime.parse(clientTimestamp);
+            
+            // Convert to local time using timezone offset
+            if (clientTimezoneOffset != null) {
+                // clientTimezoneOffset is in minutes (negative for east of UTC)
+                // e.g., -330 for IST (UTC+5:30)
+                // To get local time: UTC time - offset
+                LocalDateTime utcTime = offsetDateTime.toLocalDateTime();
+                return utcTime.minusMinutes(clientTimezoneOffset);
+            }
+            
             return offsetDateTime.toLocalDateTime();
         } catch (Exception e) {
             // Fallback to server time if parsing fails

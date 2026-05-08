@@ -26,7 +26,8 @@ public class VoiceController {
             @RequestPart(value = "audio", required = false) MultipartFile audio,
             @RequestParam("sessionId") String sessionId,
             @RequestParam(value = "text", required = false) String text,
-            @RequestParam(value = "clientTimestamp", required = false) String clientTimestamp) {
-        return ResponseEntity.ok(voicePipeline.process(sessionId, audio, text, clientTimestamp));
+            @RequestParam(value = "clientTimestamp", required = false) String clientTimestamp,
+            @RequestParam(value = "clientTimezoneOffset", required = false) Integer clientTimezoneOffset) {
+        return ResponseEntity.ok(voicePipeline.process(sessionId, audio, text, clientTimestamp, clientTimezoneOffset));
     }
 }
