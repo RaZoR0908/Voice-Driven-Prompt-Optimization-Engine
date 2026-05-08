@@ -66,6 +66,7 @@ public class PromptPipeline {
         confirmLog.setStepName("CONFIRM");
         confirmLog.setDecision("PASS");
         confirmLog.setDetail("User confirmed intent: " + intent.intent());
+        confirmLog.setCreatedAt(message.getCreatedAt());
         decisionLogRepository.save(confirmLog);
 
         // Use raw user input as source text for accurate token reduction measurement
@@ -83,6 +84,7 @@ public class PromptPipeline {
             failedValidation.setStepName("VALIDATE");
             failedValidation.setDecision("FAIL");
             failedValidation.setDetail(validationResult.reason());
+            failedValidation.setCreatedAt(message.getCreatedAt());
             decisionLogRepository.save(failedValidation);
 
             // Retry once
@@ -101,6 +103,7 @@ public class PromptPipeline {
         passedValidation.setStepName("VALIDATION");
         passedValidation.setDecision("COMPLETED");
         passedValidation.setDetail("Token reduction: " + String.format("%.0f", stats.reductionPct()) + "%");
+        passedValidation.setCreatedAt(message.getCreatedAt());
         decisionLogRepository.save(passedValidation);
 
         // Update message
@@ -118,6 +121,7 @@ public class PromptPipeline {
         promptLog.setTokenInput(stats.inputTokens());
         promptLog.setTokenOutput(stats.outputTokens());
         promptLog.setReductionPct(stats.reductionPct());
+        promptLog.setCreatedAt(message.getCreatedAt());
         promptLogRepository.save(promptLog);
 
         // Log transform
@@ -126,6 +130,7 @@ public class PromptPipeline {
         transformLog.setStepName("TRANSFORM");
         transformLog.setDecision("COMPLETED");
         transformLog.setDetail("CAVEMAN MODE applied");
+        transformLog.setCreatedAt(message.getCreatedAt());
         decisionLogRepository.save(transformLog);
 
         // Memory

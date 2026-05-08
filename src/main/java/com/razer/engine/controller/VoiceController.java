@@ -25,7 +25,8 @@ public class VoiceController {
     public ResponseEntity<VoiceInputDTO> input(
             @RequestPart(value = "audio", required = false) MultipartFile audio,
             @RequestParam("sessionId") String sessionId,
-            @RequestParam(value = "text", required = false) String text) {
-        return ResponseEntity.ok(voicePipeline.process(sessionId, audio, text));
+            @RequestParam(value = "text", required = false) String text,
+            @RequestParam(value = "clientTimestamp", required = false) String clientTimestamp) {
+        return ResponseEntity.ok(voicePipeline.process(sessionId, audio, text, clientTimestamp));
     }
 }

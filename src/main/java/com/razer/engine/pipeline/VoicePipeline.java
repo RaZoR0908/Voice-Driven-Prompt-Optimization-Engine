@@ -18,6 +18,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
+
 @Service
 public class VoicePipeline {
 
@@ -52,10 +56,13 @@ public class VoicePipeline {
     }
 
     @Transactional
-    public VoiceInputDTO process(String sessionId, MultipartFile audioFile, String text) {
+    public VoiceInputDTO process(String sessionId, MultipartFile audioFile, String text, String clientTimestamp) {
         if (sessionId == null || sessionId.isBlank()) {
             throw new IllegalArgumentException("sessionId is required");
         }
+
+        // Parse client timestamp to LocalDateTime
+        LocalDateTime messageTimestamp = parseClientTimestamp(clientTimestamp);
 
         // Get or create conversation
         Conversation conversation = conversationRepository.findBySessionId(sessionId)
@@ -87,13 +94,14 @@ public class VoicePipeline {
                 languageNormalizer.normalize(filteredText);
         abuseGuardFilter.guard(normalizedText.text());
 
-        // Save message
+        // Save message with client timestamp
         Message message = new Message();
         message.setConversation(conversation);
         message.setRawText(rawText);
         message.setTranscript(normalizedText.text());
         message.setConfidence(confidence);
         message.setLanguage(normalizedText.language());
+        message.setCreatedAt(messageTimestamp);
         message = messageRepository.save(message);
 
         // Log STT step
@@ -104,6 +112,7 @@ public class VoicePipeline {
         sttLog.setDetail(text != null && !text.isBlank()
                 ? "Text input — Whisper bypassed"
                 : "Audio transcribed with confidence=" + confidence);
+        sttLog.setCreatedAt(messageTimestamp);
         decisionLogRepository.save(sttLog);
 
         // Intent detection
@@ -116,6 +125,7 @@ public class VoicePipeline {
         intentLog.setStepName("INTENT");
         intentLog.setDecision("PASS");
         intentLog.setDetail("Intent extracted as " + intent.intent());
+        intentLog.setCreatedAt(messageTimestamp);
         decisionLogRepository.save(intentLog);
 
         String intentJson = toJson(intent);
@@ -129,6 +139,21 @@ public class VoicePipeline {
                 normalizedText.language(),
                 intentJson
         );
+    }
+
+    private LocalDateTime parseClientTimestamp(String clientTimestamp) {
+        if (clientTimestamp == null || clientTimestamp.isBlank()) {
+            return LocalDateTime.now();
+        }
+
+        try {
+            // Handle ISO 8601 format (e.g., "2026-05-07T12:49:40.647521Z")
+            OffsetDateTime offsetDateTime = OffsetDateTime.parse(clientTimestamp);
+            return offsetDateTime.toLocalDateTime();
+        } catch (Exception e) {
+            // Fallback to server time if parsing fails
+            return LocalDateTime.now();
+        }
     }
 
     private String toJson(IntentResponseDTO intent) {
